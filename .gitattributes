@@ -1,0 +1,8 @@
+# 统一换行符 —— 否则换台机器一打开就是整文件 diff，回退点会变得没用
+* text=auto eol=lf
+
+# 二进制，别当文本处理
+*.db    binary
+*.xlsx  binary
+*.xlsb  binary
+*.png   binary
