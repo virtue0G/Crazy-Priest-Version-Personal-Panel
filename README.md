@@ -1,4 +1,4 @@
-<img width="2560" height="1229" alt="image" src="https://github.com/user-attachments/assets/492d273f-c8a7-4616-bb92-b484ad4fb5c6" /># 个人成长系统
+# 个人成长系统
 
 把日常记录变成两个东西：一张**修行面板**，和一张**知识星图**。
 <img width="2560" height="1229" alt="image" src="https://github.com/user-attachments/assets/d916ef2c-18cc-4d97-8456-160c343b5926" />
