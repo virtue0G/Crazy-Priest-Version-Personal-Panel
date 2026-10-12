@@ -1,6 +1,9 @@
 # 个人成长系统
 
 把日常记录变成两个东西：一张**修行面板**，和一张**知识星图**。
+<img width="2560" height="1229" alt="image" src="https://github.com/user-attachments/assets/d916ef2c-18cc-4d97-8456-160c343b5926" />
+![Uploading image.png…]()
+
 
 面板回答「我现在该干什么」；星图回答「我知道什么、还缺什么」。两者共用一套世界观设定，但**代码和数据是分开的**——这个仓库只装代码。
 
