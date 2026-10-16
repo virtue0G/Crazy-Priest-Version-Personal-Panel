@@ -1,0 +1,47 @@
+{
+  "_说明": "脱敏示例回执。真实回执由别的项目（如 quant/receipt_*.json）生成，不入本仓库。内容均为虚构，用来演示回执的**形状**——两种条目各一条，走通 strategy 与 prediction 两条路。",
+  "schema": 1,
+  "project": "示例项目",
+  "generated": "2026-05-30",
+  "generator": {
+    "tool": "receipt.py",
+    "sources": ["demo_backtest.py", "demo_check.py"],
+    "fingerprint": "sha256:0000000000000000"
+  },
+  "items": [
+    {
+      "key": "demo/channel-mix/v1",
+      "kind": "strategy",
+      "ts": "2026-05-29",
+      "text": "示例：按周度铺货变化率做分位择时，回测 3.2 年 —— 年化 +6.1%、夏普 0.65、最大回撤 -12.4%；同期买入持有 +1.2%、回撤 -31.8%",
+      "source_type": "产出",
+      "gu": ["火候蛊", "铺路蛊"],
+      "weight": 2.0,
+      "provenance": "demo_backtest.py",
+      "payload": {
+        "ann": 0.061,
+        "sharpe": 0.65,
+        "mdd": -0.124,
+        "ann_bh": 0.012,
+        "n_years": 3.2
+      }
+    },
+    {
+      "key": "demo/promo-sawtooth",
+      "kind": "prediction",
+      "ts": "2026-05-28",
+      "text": "示例：假设促销周的销量跳变会污染趋势项，已写明证伪条件；实测跳变幅度与平日无显著差异 —— 判断被推翻，撤掉了多余的平滑处理",
+      "source_type": "踩坑",
+      "gu": ["因果蛊", "准绳蛊"],
+      "weight": 1.5,
+      "provenance": "demo_check.py",
+      "claim": "促销周的销量跳变会污染趋势项，不做平滑就会把机械跳变当成真实增长",
+      "falsifier": "促销周的跳变若与平日无显著差别，则该假设不成立，无需平滑",
+      "status": "refuted",
+      "payload": {
+        "jump_ratio": 0.022,
+        "promo_weeks": 117
+      }
+    }
+  ]
+}
