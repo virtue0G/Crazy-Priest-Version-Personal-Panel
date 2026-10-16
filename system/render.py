@@ -3,7 +3,7 @@
 这一层 A（技能式）与 B（独立应用）完全共用——将来套 Web 壳，这里照用。
 """
 from pathlib import Path
-from db import connect, REALMS, dao_marks
+from db import connect, REALMS, alloc_of, dao_marks, heart_reading
 
 OUT = Path(__file__).parent.parent / "panel.html"
 
@@ -80,6 +80,12 @@ padding:7px 18px;font-family:var(--sans);font-size:12.5px;letter-spacing:.06em;c
 .bar button .n{font-family:var(--num);font-weight:700}
 .tip{font-size:11px;color:var(--dim)}
 .ev input[type=checkbox]{accent-color:var(--jade);margin-right:6px;vertical-align:middle}
+/* 分配文本最长能到「炼道 0.667 · 器道 0.333 · 星道 0.333 · 智造道 0.333 · 智道 0.333」，
+   窄了会被截断得看不出是什么 —— 所以让它独占一行、够宽。 */
+.ev input.aw{display:block;width:min(500px,100%);margin:5px 0 4px 22px;padding:3px 8px;
+border-radius:5px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+font-family:var(--num);font-size:11.5px}
+.ev input.aw:focus{outline:none;border-color:var(--jade)}
 details{margin-top:4px}
 summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:12px;
 padding:9px 2px;border-bottom:1px solid #151f1f}
@@ -119,17 +125,68 @@ def ladder(idx: int) -> str:
     return "".join(f'<i class="{"on" if i <= idx else ""}"></i>' for i in range(7))
 
 
-def pick_today(con):
-    """今日一炼：从数据里选——最饿的、且写了日常练法的凡蛊。
+# 饥饱排位：饿的在前。**名次相同（比如都饱食）时这个序不代表谁更饿** ——
+# 所以下面任何一句话都不许拿它当「最饿」的证据（硬规矩 4：比较级是重灾区）。
+_GU_RANK = ("CASE state WHEN '濒死' THEN 0 WHEN '饥饿' THEN 1 WHEN '微饥' THEN 2 "
+            "WHEN '饱食' THEN 3 ELSE 4 END")
+_GU_BASE = "SELECT * FROM gu WHERE kind='凡' AND is_vital=0"
 
-    不硬编码任何文案，因此永远不会与数据脱节。
+
+def _heart_cell(c: dict) -> str:
+    """一格心力读数（真元）。
+
+    **自述与推演必须看得出区别** —— 一个是人说的（权威），一个是从记录算出来的
+    （下限：不记就不算）。混成一个数，会让人以为"我这周就只做了这些"。
     """
-    return con.execute("""
-        SELECT * FROM gu
-        WHERE kind='凡' AND is_vital=0 AND practice IS NOT NULL
-        ORDER BY CASE state WHEN '濒死' THEN 0 WHEN '饥饿' THEN 1
-                           WHEN '微饥' THEN 2 ELSE 3 END, id
-        LIMIT 1""").fetchone()
+    ap = c["self"]
+    if ap:                                            # 自述：人的决定
+        src = f'{ap["date"]} · 自述'
+        n = ap["capacity"]
+        mood = " · ".join(x for x in (ap["mood_text"], ap["energy_note"]) if x)
+        extra = f' · {mood}' if mood else ""
+        note = f'{c["label"]} · 自述读数'
+    else:                                             # 推演：算出来的下限
+        src = c["lo"] if c["horizon"] == "day" else f'{c["lo"]} ~ {c["hi"]}'
+        n = c["derived"]
+        extra = ""
+        note = f'{c["label"]} · 按记录推 · 不记不算，是下限'
+    return (f'<div class="apx"><span class="apd">{src}</span>'
+            f'心力 <b>{n}</b> 件{extra}<span class="aph">{note}</span></div>')
+
+
+def pick_today(con):
+    """今日一炼 → (那只蛊, 理由一句话)。
+
+    两件事分开算，**因为它们是两个不同的问题**：
+
+    · `hungriest` —— 真·最饿的凡蛊（不管有没有练法）
+    · `pick`      —— 写了日常练法、因而今天**能炼**的那只
+
+    两者常不是同一只。旧写法只算后者，却把「最饿」这顶帽子扣在它头上 ——
+    于是面板上出现过「火候蛊已『饱食』……是眼下最饿的一只」这种自己打自己的话，
+    同一页的「所养之蛊」还写着「准绳蛊微饥」。**比较级必须查出来，不能顺手写下。**
+    这一版把缺口直接说出来：最饿的那只没练法，是今天要你去补的，不是藏起来的。
+    """
+    rows = con.execute(f"{_GU_BASE} ORDER BY {_GU_RANK}, id").fetchall()
+    if not rows:
+        raise RuntimeError("一只凡蛊都没有 —— 今日一炼无从算起")
+    hungriest = rows[0]
+    pick = con.execute(
+        f"{_GU_BASE} AND practice IS NOT NULL ORDER BY {_GU_RANK}, id LIMIT 1").fetchone()
+    if pick is None:
+        raise RuntimeError("没有一只凡蛊写了日常练法 —— 今日一炼无从算起")
+
+    n_sated = sum(1 for r in rows if r["state"] == "饱食")
+    if n_sated == len(rows):
+        reason = (f"{len(rows)} 只凡蛊眼下皆饱食 —— 这只是写了练法里排最前的一只，"
+                  f"今天喂哪只都行，挑一只把日子续上。")
+    elif pick["id"] == hungriest["id"]:
+        reason = f"{pick['name']}「{pick['state']}」，是眼下最饿的一只。"
+    else:
+        reason = (f"眼下最饿的是 {hungriest['name']}「{hungriest['state']}」，但它还没定练法；"
+                  f"写了练法的里面 {pick['name']}「{pick['state']}」排最前，今天先喂它 —— "
+                  f"把 {hungriest['name']} 的练法补上，明天就轮到它。")
+    return pick, reason
 
 
 def section(title: str, hint: str = "", body: str = "", folded: bool = False) -> str:
@@ -196,21 +253,34 @@ def render(web: bool = False):
 <div class="ax"><div class="k">修 为 · 能 不 能</div><div class="v">{cult} · <b>{cap}</b></div><div class="n">精力 · 时间 · 空窍容量</div></div>
 <div class="ax"><div class="k">道 境 · 懂 不 懂</div><div class="v">{cn_num(len(daos))}道皆 <b>{realm_txt}</b></div><div class="n">境界由「达成之事」证明，不可自评</div></div>
 </div></div>''')
-    # 空窍读数 —— 带日期，自证是「截至某日」的一次自述，不冒充当下
-    ap = con.execute("SELECT * FROM aperture ORDER BY date DESC LIMIT 1").fetchone()
-    if ap:
-        parts.append(f'''<div class="apx"><span class="apd">{ap["date"]}</span>
-真元 <b>{ap["essence_pct"]}%</b> · {ap["mood_text"]} · {ap["energy_note"]}
-<span class="aph">最近一次自述读数</span></div>''')
+    # 空窍读数 · 心力 —— 自述优先、推演兜底，**两种来源必须看得出区别**。
+    # 推出来的是下限（不记就不算），绝不能让它冒充人说的数（硬规矩 2 / 4）。
+    parts.append("".join(_heart_cell(c) for c in heart_reading(con)))
+    if web:
+        # 就摆在读数旁边 —— 想自述时不用另找地方；不想记也行，上面已经是推出来的下限。
+        parts.append('''<form class="rec" method="post" action="/heart">
+<div class="rech"><b>记心力</b><span class="tip">不记也行 —— 上面那个数是按记录推出来的下限</span></div>
+<div class="bar"><input name="capacity" type="number" min="0" placeholder="件" style="width:72px">
+<select name="horizon" style="width:88px"><option value="week">本周</option><option value="day">今日</option></select>
+<input name="mood" placeholder="心境（可空）" style="width:150px;margin-left:6px">
+<button type="submit">记下</button></div></form>''')
     parts.append('<div class="rule"></div>')
 
-    # 今日一炼 —— 由「最饿的那只蛊」推出，文案全自动
-    gu = pick_today(con)
+    # 今日一炼 —— 由「能炼的那只蛊」推出，**理由也跟着数据走**（含「最饿的那只没练法」这种缺口）
+    gu, why = pick_today(con)
     ds = gu_daos(con, gu["id"])
+    # 「炼了」按钮：只出现在网页壳里。点了只记日期，饥饱由 db.derive_gu_state 从日期推——
+    # 面板上任何一处都不写死状态（硬规矩 4）。
+    fed = (f'''<form method="post" action="/feed" style="margin-top:12px">
+<input type="hidden" name="gu_id" value="{gu["id"]}">
+<div class="bar"><button type="submit">炼了 —— 记一次</button>
+<span class="tip">记的是今天这次；它会立刻变「饱食」，之后按日子自己掉档</span></div></form>'''
+           if web else "")
     parts.append(f'''<section style="margin-top:0"><div class="shead"><h2>今日一炼</h2><span class="hint">最小启动 · 放早上</span></div>
 <div class="today"><div class="tname">{gu["name"]} · {gu["practice"]}</div>
 <div class="t5"><b>5 分钟版</b>：把这件事缩到 5 分钟也算完成——低状态日就做这一版。<br>
-为何先喂它：<b>{gu["name"]}已「{gu["state"]}」</b>，它相关之道为 {'、'.join(ds)}，是眼下最饿的一只。</div></div></section>''')
+为何先喂它：{why} 它相关之道为 {'、'.join(ds)}。</div>
+{fed}</div></section>''')
 
     # 诸道
     parts.append('<section><div class="shead"><h2>诸道 · 境界与道痕</h2>'
@@ -283,13 +353,27 @@ def render(web: bool = False):
             parts.append('<form method="post" action="/confirm"><ul class="ev">')
         else:
             parts.append('<ul class="ev">')
+        n_editable = 0
         for e in pend:
-            alloc = " · ".join(f'{r["name"]} {r["w"]:g}' for r in con.execute(
-                "SELECT d.name, ed.weight w FROM evidence_dao ed JOIN daos d ON d.id=ed.dao_id "
-                "WHERE ed.evidence_id=?", (e["id"],)))
+            alloc = alloc_of(con, e["id"])
             box = (f'<input type="checkbox" name="id" value="{e["id"]}" checked> ' if web else "")
+            # 外部回执的分配可改：脚本只是**提议**，分给哪几道、各多少是人的判断。
+            # 用裸 <input>（void 元素，无闭合）—— check() 只数成对标签，
+            # input 不在其列，所以这里加多少都不会把标签配对弄崩。
+            if web and e["ext_key"]:
+                n_editable += 1
+                tail = (f'<input class="aw" type="text" name="alloc_{e["id"]}" value="{alloc}" '
+                        f'title="改分配：道名 权重 · 道名 权重（改不动就保持原样）">')
+            else:
+                tail = f'<span style="color:var(--mut)">［{alloc}］</span>'
+            src = f' · {e["origin"]}' if e["origin"] else ""
             parts.append(f'<li>{box}<span class="d">{e["ts"] or "—"}</span>{e["text"][:90]}'
-                         f'<span class="d" style="margin-left:8px">［{e["source_type"]} · {alloc}］</span></li>')
+                         f'<span class="d" style="margin-left:8px">［{e["source_type"]}{src}］</span>'
+                         f'{tail}</li>')
+        if n_editable:
+            parts.append(f'<li style="color:var(--dim);border:0">上面 {n_editable} 条带输入框的是'
+                         f'外部产出（回测脚本自动送来的）——脚本只给了个分配提议，'
+                         f'你可以直接改；没改就按原样。</li>')
         parts.append("</ul>")
         if web:
             parts.append('<div class="bar"><button type="submit">确认勾选的 '
@@ -354,11 +438,12 @@ def render(web: bool = False):
                          "ORDER BY ts DESC LIMIT 1").fetchone()
     eb = ['<ul class="ev">']
     for e in con.execute("SELECT * FROM evidence WHERE confirmed=1 ORDER BY COALESCE(ts,'') DESC LIMIT 12"):
-        alloc = " · ".join(f'{r["name"]} {r["w"]:g}' for r in con.execute(
-            "SELECT d.name, ed.weight w FROM evidence_dao ed JOIN daos d ON d.id=ed.dao_id "
-            "WHERE ed.evidence_id=?", (e["id"],)))
+        alloc = alloc_of(con, e["id"])
+        # 出处直接摆出来 —— 「每条可溯源」这句 hint 得是看得见的，不能只是承诺
+        src = (f' <span style="color:var(--dim)">{e["origin"]}</span>'
+               if e["origin"] else "")
         eb.append(f'<li><span class="d">{e["ts"] or "—"}</span>{e["text"]}'
-                  f'<span class="d" style="margin-left:8px">［{alloc}］</span></li>')
+                  f'<span class="d" style="margin-left:8px">［{alloc}{src}］</span></li>')
     eb.append("</ul>")
     parts.append(section(
         "道痕明细",

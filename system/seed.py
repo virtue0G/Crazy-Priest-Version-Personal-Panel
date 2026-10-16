@@ -46,9 +46,10 @@ GU = [
 # 改这些内容请改 JSON，不要改本文件。
 # 杀招 ↔ 蛊（多对多）。材料里那些「尚未成形的蛊」不在表中，另行文字说明。
 MOVE_GU = {
-    "AI 分析工具": ["役智蛊", "火候蛊", "因果蛊", "人言蛊"],
-    "知识地图": ["因果蛊", "铺路蛊", "人言蛊"],
     "量化回测": ["火候蛊", "因果蛊", "铺路蛊"],
+    "把研究交出去": ["人言蛊", "因果蛊", "役智蛊"],
+    "知识地图": ["因果蛊", "铺路蛊", "人言蛊"],
+    "AI 分析工具": ["役智蛊", "火候蛊", "因果蛊", "人言蛊"],
     "行业研究": ["先见蛊", "火候蛊"],
 }
 
@@ -181,8 +182,18 @@ def run(reset: bool = True):
         for to_realm, desc in enumerate(rungs, start=1):
             con.execute("INSERT INTO proof_ladder VALUES(?,?,?)", (ids[dao_name], to_realm, desc))
 
+    # 读数两种口径并存 —— 按长度分派，**不迁移、不改写**：
+    #   4 元组 = 旧口径 (date, 真元%, 心境, 精力)。真元被重新定义为「心力」后，
+    #            这条读数不再是同一个量，**不能换算、也不该丢掉**：它是当初真写下的一句话。
+    #            故 horizon 留空，面板不把它当心力读（硬规矩 2：不许拿推算冒充事实）。
+    #   5 元组 = 新口径 (date, 日/周, 心力件数, 心境, 精力)。
     for row in AP:
-        con.execute("INSERT INTO aperture(date,essence_pct,mood_text,energy_note) VALUES(?,?,?,?)", row)
+        if len(row) == 5:
+            con.execute("INSERT INTO aperture(date,horizon,capacity,mood_text,energy_note) "
+                        "VALUES(?,?,?,?,?)", row)
+        else:
+            con.execute("INSERT INTO aperture(date,essence_pct,mood_text,energy_note) "
+                        "VALUES(?,?,?,?)", row)
     # daily 不预置任何行：它是「炼了没有」的流水，预置就等于替用户谎报一次完成。
     # 今日炼什么由 render.pick_today 现算，与 daily 的分工是「计划 vs 事实」。
     con.commit()
