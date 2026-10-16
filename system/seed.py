@@ -173,7 +173,15 @@ def run(reset: bool = True):
         cur = con.execute("INSERT INTO killer_moves(name,status,materials,note,seq) VALUES(?,?,?,?,?)",
                           (name, status, materials, note, seq))
         move_ids[name] = cur.lastrowid
+    # MOVE_GU 是**结构**（哪几味蛊合炼哪一记），但杀招的名字是**内容**——
+    # 内容在 baseline.json 里，换一份 baseline 就可能少几记。
+    # 所以这里**按名字求交，不问就跳过**，并且要报出来：
+    # 曾经这里直接 move_ids[name]，于是给代码里的 MOVE_GU 加一记、忘了同步 demo/baseline.json，
+    # **空 clone 一跑就 KeyError** —— 而本机的真实数据是齐的，完全看不出来。
+    skipped = [m for m in MOVE_GU if m not in move_ids]
     for move_name, gu_names in MOVE_GU.items():
+        if move_name not in move_ids:
+            continue
         for gn in gu_names:
             con.execute("INSERT INTO killer_move_gu VALUES(?,?)", (move_ids[move_name], gu_ids[gn]))
 
@@ -200,6 +208,10 @@ def run(reset: bool = True):
 
     print(f"✓ 已灌入：{len(DAOS)} 道 / {len(GU)} 蛊 / {len(EV)} 条证据 / {len(MV)} 记杀招"
           f"　证据来源：{source_label(src)}")
+    if skipped:
+        # 不静默：这一条多半意味着「代码改了、这份 baseline 没跟上」
+        print(f"  ⚠ 代码里的 MOVE_GU 有 {len(skipped)} 记不在这份基线里，已跳过："
+              f"{'、'.join(skipped)}")
     return con
 
 
